@@ -33,6 +33,13 @@ def format_docs(docs: list[Document]) -> str:
     return "\n\n".join(formatted)
 
 
-def generate(question: str, docs: list[Document], *, tag: str) -> str:
+def generate(question: str, docs: list[Document], *, tag: str, feedback: str = "") -> str:
     user = f"질문: {question}\n\n검색된 context:\n{format_docs(docs)}"
+    if feedback:
+        # Day3-2: 재생성 시 직전 답변의 근거 없는 주장을 알려준다 (없으면 같은 입력 → 같은 답이 반복됨)
+        user += (
+            "\n\n이전 답변에서 context에 근거가 없다고 판정된 내용:\n"
+            f"{feedback}\n\n"
+            "위 내용을 빼거나 context에 있는 사실로 고쳐서 다시 답하라."
+        )
     return complete(GENERATION_PROMPT, user, tag=tag)

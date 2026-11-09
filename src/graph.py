@@ -1,11 +1,14 @@
 from langgraph.graph import END, START, StateGraph
 
 from nodes import (
+    check_generation_node,
     decide_to_generate,
+    flag_unverified_node,
     generate_node,
     grade_documents_node,
-    grade_generation,
+    no_record_node,
     retrieve_node,
+    route_after_check,
     transform_query_node,
 )
 from state import GraphState
@@ -17,7 +20,10 @@ def build_graph():
     workflow.add_node("retrieve", retrieve_node)
     workflow.add_node("grade_documents", grade_documents_node)
     workflow.add_node("generate", generate_node)
+    workflow.add_node("check_generation", check_generation_node)
     workflow.add_node("transform_query", transform_query_node)
+    workflow.add_node("no_record", no_record_node)
+    workflow.add_node("flag_unverified", flag_unverified_node)
 
     workflow.add_edge(START, "retrieve")
     workflow.add_edge("retrieve", "grade_documents")
@@ -25,20 +31,25 @@ def build_graph():
         "grade_documents",
         decide_to_generate,
         {
-            "transform_query": "transform_query",
             "generate": "generate",
+            "transform_query": "transform_query",
+            "no_record": "no_record",
         },
     )
     workflow.add_edge("transform_query", "retrieve")
+    workflow.add_edge("generate", "check_generation")
     workflow.add_conditional_edges(
-        "generate",
-        grade_generation,
+        "check_generation",
+        route_after_check,
         {
-            "hallucination": "generate",
-            "relevant": END,
-            "not relevant": "transform_query",
+            "accept": END,
+            "regenerate": "generate",
+            "unverified": "flag_unverified",
+            "transform_query": "transform_query",
         },
     )
+    workflow.add_edge("no_record", END)
+    workflow.add_edge("flag_unverified", END)
 
     return workflow.compile()
 
@@ -57,6 +68,9 @@ def run_agentic_rag(
             "strategy": strategy,
             "rewrite_count": 0,
             "generation_attempts": 0,
+            "hallucination_feedback": "",
+            "grounded": False,
+            "answers_question": False,
         }
     )
 

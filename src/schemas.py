@@ -15,6 +15,10 @@ class GradeHallucination(BaseModel):
     binary_score: str = Field(
         description="답변이 문서에 근거하면 'yes', 환각이면 'no'"
     )
+    reason: str = Field(
+        default="",
+        description="'no'일 때 문서에 근거가 없는 주장을 구체적으로 나열한다. 'yes'면 빈 문자열.",
+    )
 
 
 class GradeAnswer(BaseModel):

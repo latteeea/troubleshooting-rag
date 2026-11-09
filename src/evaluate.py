@@ -109,7 +109,15 @@ def run_system(system: str, question: str) -> dict:
         return {"answer": result["answer"], "sources": result["sources"], "rewrite_count": 0, "rewritten_question": None}
     if system == "agentic":
         result = run_agentic_rag(question=question, strategy=STRATEGY)
+        answer = result["answer"]
+        if answer == nodes.NO_RECORD_ANSWER:
+            outcome = "no_record"
+        elif answer.endswith(nodes.UNVERIFIED_NOTE):
+            outcome = "unverified"
+        else:
+            outcome = "accepted"
         return {
+            "outcome": outcome,
             "answer": result["answer"],
             "sources": result["sources"],
             "rewrite_count": result["rewrite_count"],

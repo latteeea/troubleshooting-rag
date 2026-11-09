@@ -12,3 +12,6 @@ class GraphState(TypedDict):
     strategy: Annotated[str, "청킹 전략 (recursive | markdown)"]
     rewrite_count: Annotated[int, "query rewrite 시도 횟수"]
     generation_attempts: Annotated[int, "답변 생성·재생성 시도 횟수"]
+    hallucination_feedback: Annotated[str, "직전 생성에서 근거 없다고 판정된 주장 (재생성 프롬프트에 전달)"]
+    grounded: Annotated[bool, "직전 생성이 문서에 근거한다고 판정됐는가"]
+    answers_question: Annotated[bool, "직전 생성이 질문에 답한다고 판정됐는가"]
