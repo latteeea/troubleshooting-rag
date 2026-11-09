@@ -1,0 +1,69 @@
+[
+  {
+    "title": "안드로이드에서만 프로필·약관 조회 404: X-Username 헤더와 JWT 사용자 불일치 (/api/users/profile, /me/agreements)",
+    "tech_stack": [
+      "React Native",
+      "AsyncStorage",
+      "JWT",
+      "REST API"
+    ],
+    "keywords": [
+      "X-Username",
+      "Authorization: Bearer",
+      "GET /api/users/profile",
+      "GET /api/users/me/agreements",
+      "/api/auth/me",
+      "404",
+      "AsyncStorage",
+      "getUsername()",
+      "getProfile()",
+      "getUserAgreements",
+      "trim()",
+      "@username",
+      "@insole_app:username"
+    ],
+    "source_lines": [
+      {
+        "start_line": 1,
+        "end_line": 79
+      },
+      {
+        "start_line": 81,
+        "end_line": 142
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "토큰은 유효해서 /api/auth/me는 200인데 프로필/약관 조회(/api/users/profile, /api/users/me/agreements)만 404가 발생했다. iOS는 정상이고 안드로이드에서만 문제가 났을 가능성이 크다고 정리했다.",
+    "context": "본인 정보를 조회하는 API인데도 클라이언트가 Authorization Bearer 토큰에 더해 AsyncStorage에 저장된 username을 X-Username 헤더로 함께 보내고 있었다. getUserAgreements({ username })도 X-Username을 넘기는 경우가 있었다.",
+    "attempts": [
+      {
+        "hypothesis": "서버가 X-Username 헤더를 우선 적용하거나 JWT 사용자와 일치하는지 검증하고, 불일치하면 404를 반환한다.",
+        "result": "partial",
+        "evidence": "백엔드 구현에 따라 다르다고 전제한 해석이며, 서버 코드를 확인했다는 기록은 없다. 토큰이 유효한데 프로필/약관만 404가 나는 현상(/api/auth/me 200)과 부합한다."
+      },
+      {
+        "hypothesis": "안드로이드에서 AsyncStorage의 username 값이 로그인한 계정과 다르다. 예전 키(username, @insole_app:username)에 남은 값, 앞뒤 공백, 보이지 않는 문자, 대소문자 차이, getUsername()의 키 우선순위 때문일 수 있다.",
+        "result": "partial",
+        "evidence": "실제 저장값을 확인했다는 기록은 없고 가능성으로만 서술되어 있다. iOS에서는 우연히 같은 키·문자열이 맞았을 가능성이 크다고 보았다."
+      },
+      {
+        "hypothesis": "getProfile()은 Authorization만 사용하고 getUserAgreements()는 username 옵션(X-Username)을 제거하며, getUsername()에는 trim()을 추가한다.",
+        "result": "confirmed",
+        "evidence": "이 수정 후 잘 동작했다고 기록되어 있다."
+      }
+    ],
+    "root_cause": "본인 조회 API에 X-Username 헤더를 추가로 보내서, JWT가 가리키는 사용자와 헤더 username이 한 글자라도 어긋나면 서버가 사용자 식별 불일치로 404를 줄 수 있었다. 안드로이드에서 AsyncStorage 저장값·키 우선순위·문자열이 달랐을 가능성이 크다. 네트워크가 막힌 것이 핵심이 아니었다.",
+    "resolution": "getProfile()에서 getUsername() 호출과 username 인자를 제거해 Authorization만 사용하도록 바꿨다. profile/index.tsx에서는 getUserAgreements({ username: foundUsername }) 대신 getUserAgreements()를 호출하도록 바꿨다. getUsername()에는 trim()을 추가해 공백 차이를 방어했다. X-Username 검증 부분은 제거했다.",
+    "insights": [
+      "/me 및 본인 프로필 조회는 JWT만으로 사용자를 식별하게 하는 것이 맞다.",
+      "본인 조회에 X-Username을 추가로 보내면 서버가 검증·우선 적용할 때 한 글자 차이로 404 등 이상 동작이 생길 수 있다.",
+      "AsyncStorage 값에 의존하지 않으면 OS별 저장값 차이에 덜 흔들린다.",
+      "같은 JS 코드에서 한 OS만 깨질 때는 보내는 문자열이 미묘하게 다른 경우를 의심한다."
+    ],
+    "card_id": "X-Username-card-0",
+    "filename": "X-Username.md",
+    "source": "data/public/X-Username.md",
+    "raw_text": "## **왜 고치니까 잘 됐는지 (상세 정리)**\n\n### **1. 클라이언트가 하고 있던 일**\n\n이전 코드는 대략 이렇게 동작했습니다.\n\n- **`GET /api/users/profile`**\n    - `Authorization: Bearer <액세스토큰>`\n    - 여기에 더해 **`X-Username: <AsyncStorage에 저장된 아이디>`** 를 붙였습니다.\n- **`GET /api/users/me/agreements`**\n    - URL 안에 이미 **`/me/`** 가 있어서 “**지금 로그인한 나**”를 가리키는 전형적인 REST 패턴인데,\n    - 마찬가지로 **`X-Username`** 을 넘기는 경우가 있었습니다 (`getUserAgreements({ username })`).\n\n즉, **“나 자신”을 조회하는 API**인데도, **헤더로 또 한 번 “이 사용자 이름이다”라고 보내는 이중 정보**가 있었습니다.\n\n---\n\n### **2. 서버 입장에서 어떻게 해석될 수 있는지**\n\n백엔드 구현에 따라 다르지만, 흔한 패턴은 다음과 같습니다.\n\n1. **JWT만 본다**\n    - 토큰 안의 `sub` / `user_id` 등으로 “누구인지” 결정하고, 그 사용자의 프로필·약관 동의를 돌려준다.\n2. **`X-Username`이 있으면 그걸 우선한다 / 검증한다**\n    - “헤더에 적힌 username으로 프로필을 찾는다”\n    - 또는 “JWT의 사용자와 **헤더의 username이 같은지** 검사한다”\n3. **불일치·잘못된 값이면 404**\n    - “해당 사용자를 찾을 수 없음”으로 처리하는 API도 있습니다 (401이 아니라 404인 경우).\n\n그래서 **토큰은 유효한데** (`/api/auth/me` 200), **프로필/약관만 404**가 나는 현상이 나올 수 있습니다.\n\n---\n\n### **3. 왜 iOS는 되고 안드로이드만 안 됐을 가능성이 큰지**\n\n**같은 JS 코드**인데 한쪽만 깨지는 이유는, 보통 **“보내는 문자열이 미묘하게 다르다”** 쪽입니다.\n\n- **`X-Username`에 실려 가는 값**은 `AsyncStorage`에서 꺼낸 `username`입니다.\n- 저장 시점은 로그인 직후 `setItem('@username', trimmedUsername)` 등인데,\n    - 예전에 다른 키(`username`, `@insole_app:username`)에 **다른 형태**로 저장된 값이 남았거나,\n    - **앞뒤 공백**, **보이지 않는 문자**, **대소문자** 등이 OS/스토리지 구현 차이로 달라질 수 있습니다.\n- `getUsername()`은 **여러 키를 순서대로** 보는데, **첫 번째로 읽힌 값**이 “로그인한 사람과 같은 사람”이 아닐 수도 있습니다.\n\n이때:\n\n- JWT 안의 사용자 = **방금 로그인한 계정** (서버는 이걸로 `/auth/me`는 성공)\n- `X-Username` = **다른 문자열** 또는 **서버 DB에 없는 조합**\n\n이면 서버가 “이 username으로는 프로필을 못 찾겠다” → **404**를 줄 수 있습니다.\n\niOS에서는 우연히 **같은 키·같은 문자열**이 잘 맞았고, 안드로이드에서는 **스토리지/키 우선순위/문자열**이 달라져서 **불일치**가 났을 가능성이 큽니다.\n\n(재설치 후에도, 앱이 쓰는 키가 여러 개라면 **다른 경로로 예전 값이 들어가는** 경우도 생깁니다.)\n\n---\n\n### **4. 이번 수정이 맞는 이유 (본질적인 정리)**\n\n| **API** | **의미** |\n| --- | --- |\n| `/api/users/profile` (본인 조회) | 보통 **JWT만**으로 “현재 사용자”를 특정합니다. |\n| `/api/users/me/agreements` | URL의 **`me`** 가 이미 “토큰의 나”를 의미합니다. |\n\n여기에 **`X-Username`을 추가로 보내는 것**은:\n\n- 서버가 이를 **무시**하면 다행이지만,\n- **검증/우선 적용**에 쓰이면, JWT와 **한 글자라도 어긋날 때** 이상 동작(404 등)을 유발할 수 있습니다.\n\n그래서 이번에 한 것은:\n\n1. **`getProfile()`**\n    - **`Authorization`만** 사용 → “토큰이 가리키는 사용자”의 프로필만 조회.\n    - AsyncStorage username에 의존하지 않음 → **OS별 저장값 차이**에 덜 흔들림.\n2. **`getUserAgreements()`**\n    - **`/users/me/...`** 는 **JWT 기준 ‘나’**만 보면 되므로 `username` 옵션(→ `X-Username`) 제거.\n3. **`getUsername()`의 `trim()`**\n    - 나중에 다른 API에서 `X-Username`이 필요할 때, **공백만 다른 값**으로 잘못 나가는 것을 줄이기 위한 방어.\n\n정리하면, **문제의 핵심은 “네트워크가 안드로이드만 막혔다”가 아니라, “내 정보 조회인데 `X-Username`으로 인한 사용자 식별 불일치 가능성”**이었고, **`/me`·본인 프로필은 JWT만 쓰도록 맞춘 것**이 해결책이 된 것입니다.\n\n- 기존 → 변경 코드\n    - utils/api/profile.ts\n    \n    ```tsx\n    export async function getProfile(): Promise<ApiResponse<GetProfileResponse>> {\n      const username = await getUsername();\n      if (!username) {\n        throw new Error('사용자 이름을 찾을 수 없습니다.');\n      }\n    \n      return apiGet<GetProfileResponse>(ENDPOINTS.USERS.PROFILE, {\n        username,\n      });\n    }\n    \n    // 바꾼 버전\n    export async function getProfile(): Promise<ApiResponse<GetProfileResponse>> {\n      return apiGet<GetProfileResponse>(ENDPOINTS.USERS.PROFILE);\n    ```\n    \n    - app/(tabs)/profile/index.tsx\n    \n    ```tsx\n    if (foundUsername) {\n                try {\n                  const agreementsResponse = await getUserAgreements({ username: foundUsername });\n                  if (agreementsResponse.success && agreementsResponse.data) {\n                    const agreedTerms = agreementsResponse.data.agreements.filter(\n                      (agreement) => agreement.agreed\n                    );\n                    setUserAgreements(agreedTerms);\n                  }\n                } catch (error) {\n                  const err = error as ApiError;\n                  if (err?.requiresAdditionalInfo === true && Array.isArray(err.missingFields) && err.missingFields.length > 0) {\n                    setAdditionalInfoResume(err.missingFields);\n                    router.replace(getFirstAdditionalInfoRoute(err.missingFields) as any);\n                    return;\n                  }\n                  console.error('약관 동의 상태 조회 실패:', error);\n                }\n                \n      \n     // 바꾼 버전\n     \n     try {\n                const agreementsResponse = await getUserAgreements();\n                if (agreementsResponse.success && agreementsResponse.data) {\n                  const agreedTerms = agreementsResponse.data.agreements.filter(\n                    (agreement) => agreement.agreed\n                  );\n                  setUserAgreements(agreedTerms);\n                }\n              } catch (error) {\n                const err = error as ApiError;\n                if (err?.requiresAdditionalInfo === true && Array.isArray(err.missingFields) && err.missingFields.length > 0) {\n                  setAdditionalInfoResume(err.missingFields);\n                  router.replace(getFirstAdditionalInfoRoute(err.missingFields) as any);\n                  return;\n    ```\n    \n    - X-Username 검증 부분 제거",
+    "span_problems": []
+  }
+]

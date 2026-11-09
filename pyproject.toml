@@ -1,0 +1,22 @@
+[project]
+name = "troubleshooting-rag"
+version = "0.1.0"
+description = "Self-RAG over personal troubleshooting notes, with a baseline-vs-agentic evaluation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.80.0",
+    "faiss-cpu>=1.13.2",
+    "langchain-community>=0.4.1",
+    "langchain-core>=1.2.5",
+    "langchain-huggingface>=1.0.0",
+    "langchain-text-splitters>=1.1.1",
+    "langgraph>=1.1.3",
+    "pydantic>=2.0",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "sentence-transformers>=3.0.0",
+]
+
+[tool.uv]
+package = false
