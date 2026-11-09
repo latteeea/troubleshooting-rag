@@ -8,15 +8,21 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 # 로컬 임베딩 (API 키 불필요, 한국어 지원). 첫 실행 시 모델(~2GB)을 다운로드한다.
 EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+EMBEDDING_BATCH_SIZE = 4
+EMBEDDING_MAX_SEQ_LENGTH = 2048
 
 
 @lru_cache(maxsize=1)
 def get_embedding_model() -> HuggingFaceEmbeddings:
     # 모델 로딩이 무거우므로 프로세스당 1회만 로드한다.
-    return HuggingFaceEmbeddings(
+    embeddings = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
-        encode_kwargs={"normalize_embeddings": True},
+        encode_kwargs={"normalize_embeddings": True, "batch_size": EMBEDDING_BATCH_SIZE},
     )
+    # CPU 메모리 보호: markdown 청킹은 최대 ~12k 토큰 청크가 생겨 기본값(8192)으로는 메모리가 폭주한다.
+    # 초과분은 검색용 벡터에만 잘려 반영되고, LLM에는 청크 전문이 그대로 전달된다.
+    embeddings._client.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
+    return embeddings
 
 def build_faiss_vectorstore(chunks: list[Document]) -> FAISS:
     """

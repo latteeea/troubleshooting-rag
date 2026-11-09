@@ -138,3 +138,78 @@
   expected_docs: []
   key_points:
     - 관련 기록이 없다고 답함 (내용을 지어내지 않음)
+
+# ------------------------------------------------------------------
+# Day2 추가: 어려운 문항 (기존 문항이 천장 효과를 보여서 추가, 수정 전 코드로 먼저 측정)
+#   multi_doc     : 여러 문서를 묶어야 답할 수 있는 질문 (context_recall로 문서별 회수율을 본다)
+#   vague         : 기억이 흐릿한 상태의 모호한 질문
+#   near_negative : 비슷한 기록은 있지만 정확히 그 내용은 없는 질문 → 없다고 답해야 정답
+# ------------------------------------------------------------------
+
+- id: H01
+  type: multi_doc
+  question: 외부 API 쓰다가 문제 생겼던 사례들 전부 정리해줘
+  expected_docs: [spotify_api.md, pagination.md]
+  key_points:
+    - Spotify API 정책 변경(프리미엄 계정만 사용 가능)으로 음악 검색이 403으로 실패한 사례
+    - 아임웹 API의 offset/limit 페이지네이션을 page로 잘못 요청해 고객정보 일부가 동기화되지 않은 사례
+    - 외부 API는 공지 구독과 응답 규격/정책 확인이 필요하다는 공통 교훈
+
+- id: H02
+  type: multi_doc
+  question: iOS에선 괜찮은데 안드로이드에서만 문제가 생겼던 사례들 비교해줘
+  expected_docs: [android_network_security.md, android_network_security2.md, X-Username.md]
+  key_points:
+    - 안드로이드 9+ cleartext(HTTP) 차단 + 설정이 최종 manifest에 반영되지 않아 서버 연결 실패한 사례
+    - X-Username 헤더 값이 OS별 저장값 차이로 JWT 사용자와 어긋나 안드로이드에서만 프로필 404가 난 사례
+    - 두 사례 모두 플랫폼별 설정/저장 방식 차이가 원인
+
+- id: H03
+  type: multi_doc
+  question: 권한 문제 때문에 막혔던 사례들 모아서 알려줘
+  expected_docs: [android_build_error.md, nginx_deploy.md]
+  key_points:
+    - EAS 안드로이드 빌드에서 NTFS 권한(ACL/소유자) 꼬임으로 tar Permission denied → icacls 등으로 해결
+    - Nginx 실행 계정(www-data)이 /home/ubuntu 하위 빌드 파일에 접근 못 해 500/403 → chmod 755로 해결
+
+- id: H04
+  type: multi_doc
+  question: DB 커넥션 관련해서 겪었던 문제들 정리해줘
+  expected_docs: [long_polling.md, pgadmin_killed.md]
+  key_points:
+    - long polling이 DB 커넥션을 붙잡아 SQLAlchemy QueuePool 한도 초과로 서버가 죽은 사례
+    - pgAdmin 재시도 폭주로 max_connections 초과 에러가 난 사례 (원인은 pgAdmin 등록 서버 설정)
+
+- id: H05
+  type: vague
+  question: 배포하고 나서 화면이 하얗게만 나왔던 거 뭐였지?
+  expected_docs: [nginx_deploy.md]
+  key_points:
+    - Nginx 실행 계정(www-data)이 홈 디렉토리 하위 빌드 파일에 접근할 권한이 없었음
+    - 권한이 막혀 try_files 루프로 500/403 발생
+    - 상위 폴더부터 chmod 755로 권한을 부여해 해결
+
+- id: H06
+  type: vague
+  question: 서버 로그가 미친 듯이 계속 찍히던 거 왜 그랬어?
+  expected_docs: [long_polling.md]
+  key_points:
+    - 클라이언트가 응답을 받자마자 즉시 재요청함
+    - since 값이 None으로 들어와 서버가 대기 없이 즉시 응답함
+    - since 값을 넣어주자 로그가 확연히 줄어듦
+
+- id: H07
+  type: near_negative
+  question: Nginx에서 502 Bad Gateway 났을 때 어떻게 해결했어?
+  expected_docs: []
+  key_points:
+    - 502 에러에 대한 기록은 없다고 답함
+    - 기록된 다른 Nginx 에러(405/403/500 등)의 해결법을 502 해결법인 것처럼 단정하지 않음
+
+- id: H08
+  type: near_negative
+  question: iOS 앱에서 HTTP 서버 연결이 막혔던 문제는 어떻게 해결했어?
+  expected_docs: []
+  key_points:
+    - iOS에서 HTTP 연결이 막힌 기록은 없다고 답함 (기록상 iOS는 예외 설정으로 정상 동작)
+    - 안드로이드의 해결법을 iOS 사례인 것처럼 지어내지 않음
