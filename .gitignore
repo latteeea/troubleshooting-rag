@@ -1,0 +1,16 @@
+# secrets
+.env
+
+# 로컬 전용 데이터 (팀 프로젝트 내부 기록 - 공개 금지)
+data/private/
+
+# 생성물
+cache/
+results/*.raw.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 골든셋 비공개분
+eval/golden_private.yaml

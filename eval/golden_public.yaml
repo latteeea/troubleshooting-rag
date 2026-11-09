@@ -1,0 +1,140 @@
+# 골든셋 (공개분) — data/public 문서 대상
+#
+# type
+#   keyword    : 문서에 나오는 고유 용어를 그대로 사용한 질문 (검색이 쉬워야 정상)
+#   paraphrase : 증상/상황만 묘사하고 문서 고유 용어를 피한 질문 (query rewrite가 도움이 되는지 보는 축)
+#   leak_probe : 기존 비교 질문 중 rewriter 프롬프트 예시와 겹치는 문항 (누수 효과 측정용)
+#   negative   : 데이터에 답이 없는 질문 → "기록에 없음"을 말해야 정답
+#
+# expected_docs : 검색 정답 (top-k 안에 하나라도 들어오면 hit)
+# key_points    : 답변 채점 기준. judge가 각 포인트 포함 여부를 본다.
+#
+# 규칙: 이 파일은 rewriter/generation 프롬프트를 보지 않고 작성하고, Day2 측정 전 동결한다.
+
+- id: P01
+  type: paraphrase
+  question: 코드가 안 바뀌었는데 배포 앱 기능이 막힌 경우가 있었지? 사례가 뭐였고 원인이 뭐였고 해결 어떻게 했는지?
+  expected_docs: [spotify_api.md]
+  key_points:
+    - 음악 검색에 쓰던 Spotify API 호출이 403으로 실패
+    - Spotify 정책 변경(프리미엄 계정 클라이언트만 API 사용 가능)이 원인
+    - 변경 공지를 받지 못해 몰랐음
+    - 다른 API로 교체해 해결
+    - 외부 API 업체의 공지(메일/SNS)를 구독해야 한다는 인사이트
+
+- id: P02
+  type: keyword
+  question: 아임웹 고객정보 동기화에서 성별이랑 생년월일이 안 들어온 원인과 해결 방법은?
+  expected_docs: [pagination.md]
+  key_points:
+    - 아임웹 API가 offset/limit 방식으로 페이지네이션됨
+    - offset을 모르고 page 파라미터로 잘못 요청함
+    - 페이지네이션 파라미터를 맞춰서 해결
+    - 외부 API 연동 시 응답 규격과 페이지네이션 정책을 확인해야 함
+
+- id: P03
+  type: paraphrase
+  question: 휴대폰 설정에서 글자 크기를 키우면 앱 글자까지 같이 커지는 걸 어떻게 막았어?
+  expected_docs: [system_font_setting.md]
+  key_points:
+    - 전역 Text.defaultProps.allowFontScaling = false 설정이 먹지 않음
+    - 엔트리포인트(index.js) 순서를 바꿔도 해결되지 않음
+    - 최신 React Native 구조에서 전역 defaultProps 패치가 보장되지 않는 것이 원인
+    - AppText 같은 래퍼 컴포넌트로 교체해 해결
+
+- id: P04
+  type: keyword
+  question: Nginx에서 로그인 요청에 405 Not Allowed가 뜬 이유랑 해결 방법 알려줘
+  expected_docs: [nginx_deploy.md]
+  key_points:
+    - Nginx가 /api/ 요청을 백엔드로 넘기지 않고 정적 파일로 처리하려 함
+    - 정적 파일에 대한 POST를 허용하지 않아 405 발생
+    - Vite proxy 설정은 로컬 개발용일 뿐 배포 환경에서는 동작하지 않음
+    - location /api/ 블록에 proxy_pass(8000번 포트)를 추가해 해결
+
+- id: P05
+  type: paraphrase
+  question: 서버에 관리자웹을 배포했는데 이상한 사이트가 뜬 사례 찾아줘 
+  expected_docs: [nginx_deploy.md]
+  key_points:
+    - 서버에 dist 폴더가 여러 개 있었음
+    - Nginx root가 AWS CLI 설치 폴더(~/aws/dist)를 가리키고 있었음
+    - find로 실제 빌드 위치(/var/www/manage/dist)를 찾아 root 경로를 수정
+
+- id: P06
+  type: paraphrase
+  question: iOS 테스트 빌드에서는 서버 연결이 잘 되는데 apk 파일로 받은 안드 앱만 서버에 연결 안되던 문제 정리해줘
+  expected_docs: [android_network_security.md, android_network_security2.md]
+  key_points:
+    - 서버가 HTTPS가 아닌 HTTP(IP 주소)로 운영 중이었음
+    - 안드로이드 9 이상은 cleartext(HTTP) 통신을 기본 차단
+    - usesCleartextTraffic 설정이 빌드(prebuild/manifest 병합) 과정에서 최종 AndroidManifest에 반영되지 않음
+    - network_security_config + manifest 직접 설정(또는 config plugin)으로 해결
+    - iOS는 NSExceptionDomains로 예외를 허용해 둬서 문제가 없었음
+    - 근본 해결은 HTTPS 전환
+
+- id: P07
+  type: keyword
+  question: EAS로 안드로이드 빌드할 때 tar Permission denied 에러가 난 원인은?
+  expected_docs: [android_build_error.md]
+  key_points:
+    - OneDrive 동기화를 끊고 프로젝트 폴더를 옮긴 뒤 발생
+    - 로컬 tar는 성공했지만 EAS 빌드는 실패
+    - 파일/폴더의 NTFS 권한(ACL, 소유자, 읽기전용)이 꼬인 것이 원인
+    - attrib / takeown / icacls로 권한 상속을 켜고 full control을 재부여해 해결
+
+- id: P08
+  type: paraphrase
+  question: 매장에 기기를 한 대 더 들였더니 몇 분 만에 서버가 죽어버린 사건, 원인부터 해결까지 정리해줘
+  expected_docs: [long_polling.md]
+  key_points:
+    - 관리자웹에서 키오스크 점검 화면을 띄우는 기능을 long polling으로 구현
+    - SQLAlchemy QueuePool 한도 초과(DB 커넥션 고갈)로 장애
+    - since 값이 None으로 들어와 즉시 응답 → 즉시 재요청이 반복됨
+    - long polling 요청이 대기 동안 DB 커넥션을 붙잡는 구조가 문제
+    - polling / SSE / long polling 개선안을 비교하고, 대기 비용이 0에 가깝게 만드는 방향으로 수정
+
+- id: P09
+  type: keyword
+  question: pgAdmin이 폭주하면서 max_connections 초과 에러가 났던 진짜 원인이 뭐였어?
+  expected_docs: [pgadmin_killed.md]
+  key_points:
+    - pgAdmin에 등록된 서버의 maintenance DB가 실제로 존재하지 않음
+    - 비밀번호가 저장되지 않아 인증 실패 후 재시도 반복
+    - 원격 DB SSL 연결 끊김 재시도까지 겹쳐 폭주
+    - pg_stat_activity로 확인한 결과 Postgres 자체가 원인이 아니었음
+    - DBeaver로 전환해 해결
+
+- id: P10
+  type: paraphrase
+  question: 안드로이드에서만 로그인은 되는데 내 프로필 조회가 404로 실패하던 버그는 왜 생긴 거야?
+  expected_docs: [X-Username.md]
+  key_points:
+    - 본인 조회 API에 JWT와 별도로 X-Username 헤더를 함께 보냄
+    - 헤더의 username과 JWT 사용자가 어긋나면 서버가 404를 반환할 수 있음
+    - OS별 저장값 차이로 안드로이드에서만 불일치 발생
+    - Authorization(JWT)만 사용하도록 수정해 해결
+
+- id: P11
+  type: leak_probe
+  question: Cursor가 왜 멍청해 보였는지 인과적으로 설명해줘
+  expected_docs: [cursor_claude.md]
+  key_points:
+    - X-Username 인증 문제를 표면적으로만 고치는 surface-level fix
+    - 같은 말을 반복하는 무한 루프/멈춤
+    - 파일 단위로만 코드를 짜는 경향
+    - 사용자는 전체 설계를 주는데 에디터는 열린 파일 안에서만 동작하는 구조적 한계
+
+- id: N01
+  type: negative
+  question: Redis 캐시 TTL 설정 실수로 장애가 났던 사례를 정리해줘
+  expected_docs: []
+  key_points:
+    - 관련 기록이 없다고 답함 (내용을 지어내지 않음)
+
+- id: N02
+  type: negative
+  question: 쿠버네티스 파드가 OOMKilled로 계속 재시작됐던 원인이 뭐였어?
+  expected_docs: []
+  key_points:
+    - 관련 기록이 없다고 답함 (내용을 지어내지 않음)
