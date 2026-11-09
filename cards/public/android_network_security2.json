@@ -1,0 +1,76 @@
+[
+  {
+    "title": "Android 9+ APK에서 HTTP 서버 연결 실패 - usesCleartextTraffic·network_security_config 및 config plugin으로 prebuild 덮어쓰기 방지",
+    "tech_stack": [
+      "React Native",
+      "Expo",
+      "EAS Build",
+      "Android",
+      "iOS",
+      "@expo/config-plugins"
+    ],
+    "keywords": [
+      "usesCleartextTraffic",
+      "network_security_config",
+      "network_security_config.xml",
+      "cleartextTrafficPermitted",
+      "android:networkSecurityConfig",
+      "withAndroidManifest",
+      "withDangerousMod",
+      "prebuild",
+      "AndroidManifest",
+      "NSExceptionDomains",
+      "NSExceptionAllowsInsecureHTTPLoads",
+      "서버에 연결할 수 없습니다."
+    ],
+    "source_lines": [
+      {
+        "start_line": 1,
+        "end_line": 13
+      },
+      {
+        "start_line": 15,
+        "end_line": 46
+      },
+      {
+        "start_line": 48,
+        "end_line": 87
+      },
+      {
+        "start_line": 89,
+        "end_line": 99
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "APK 파일로 설치해 실행하면 \"서버에 연결할 수 없습니다. (https://15.~~~) 실제 기기를 사용하는 경우 컴퓨터의 로컬 IP 주소를 사용해야 합니다.\" 에러가 나옴. 같은 서버가 iOS에서는 연결이 잘 됨.",
+    "context": "개발 중인 서버에 SSL을 붙이지 못해 https가 아닌 http로 운영 중. React Native Expo와 EAS build로 android와 ios를 동시에 빌드하는 환경.",
+    "attempts": [
+      {
+        "hypothesis": "Android 9+부터 HTTP를 기본 차단하므로 cleartext 허용 설정이 필요하다고 보고 app.json에 android.usesCleartextTraffic: true를 설정, network_security_config.xml(base-config cleartextTrafficPermitted=\"true\")을 만들고 AndroidManifest의 application 태그에 usesCleartextTraffic와 networkSecurityConfig를 연결",
+        "result": "partial",
+        "evidence": "수동으로 설정한 뒤 prebuild를 다시 돌리면 androidmanifest가 덮어씌워질 수 있다고 기록됨. 이후 정리에서 prebuild 때 네이티브 설정이 없어져 에러가 다시 생겼다고 서술."
+      },
+      {
+        "hypothesis": "config plugin(withDangerousMod, withAndroidManifest)으로 빌드 때마다 network_security_config.xml 생성과 manifest 속성 주입을 자동화",
+        "result": "unknown",
+        "evidence": "플러그인 코드가 기록되어 있으나 적용 후 결과 확인은 원문에 명시되지 않음."
+      },
+      {
+        "hypothesis": "iOS에서는 왜 연결이 되었는지 확인",
+        "result": "confirmed",
+        "evidence": "iOS는 기본적으로 보안 안 된 HTTP를 막지만, NSExceptionDomains에 http ip 주소를 넣고 NSExceptionAllowsInsecureHTTPLoads: true로 HTTP 예외를 허용해둔 상태였음."
+      }
+    ],
+    "root_cause": "Android 9+ 이상은 cleartext(HTTP) 트래픽을 기본 차단하는데, app.json의 설정만으로는 부족하고 네이티브 폴더의 파일(network_security_config 등)이 필요함. 수동으로 넣은 네이티브 설정은 prebuild 시 사라져 에러가 다시 발생함. iOS는 NSExceptionDomains(app.json)로 예외를 허용해두어 문제가 없었음.",
+    "resolution": "app.json에 usesCleartextTraffic: true 설정, network_security_config.xml 생성, AndroidManifest application 태그에 android:usesCleartextTraffic와 android:networkSecurityConfig 연결. prebuild 시 덮어씌워지는 것을 막기 위해 config plugin(withNetworkSecurityConfig)으로 빌드 때마다 xml 생성과 manifest 속성을 자동 주입.",
+    "insights": [
+      "Android는 iOS처럼 info.plist 한 덩어리로 예외를 잡는 방식이 아니라 usesCleartextTraffic, network_security_config 등으로 명시적 허용이 필요하다.",
+      "app.json 외에 네이티브 폴더에 설정되는 파일은 prebuild 때 사라질 수 있으므로 config plugin으로 자동 주입한다."
+    ],
+    "card_id": "android_network_security2-card-0",
+    "filename": "android_network_security2.md",
+    "source": "data/public/android_network_security2.md",
+    "raw_text": "개발중인 서버가 ssl 을 붙이지 못해서 https가 아닌 http로 운영되고 있고\n\nreact native expo 및 eas build 로 android와 ios 동시 빌드를 하고 있다면\n\nandroid 의 네이티브 network config 설정이 필요함\n\nandroid 9+ 이상부터는 HTTP를 기본적으로 차단하기 때문에 이를 풀어주지 않으면 apk 파일로 다운받았을때 \n\n서버에 연결할 수 없습니다. ([https://15.~~~](https://15.~~~/)) 실제 기기를 사용하는 경우 컴퓨터의 로컬 IP 주소를 사용해야 합니다. 예:[http://192~~](http://192~~/)\n\n이러한 에러가 나옴 \n\n이때 HTTP로 테스트하기 위해서는 network_security_config / usesCleartextTraffic이 필요함 \n\n- app.json에 http 허용 켜기 (usesCleartextTraffic: true)\n    \n    ```jsx\n    {\n      \"expo\": {\n        \"android\": {\n          \"usesCleartextTraffic\": true\n        }\n      }\n    }\n    ```\n    \n- network_security_config.xml 만들기\n    \n    ```jsx\n    <?xml version=\"1.0\" encoding=\"utf-8\"?>\n    <network-security-config>\n      <base-config cleartextTrafficPermitted=\"true\" />\n    </network-security-config>\n    \n    ```\n    \n- android manifest의 application 태그에 연결하기\n    \n    ```jsx\n    android:usesCleartextTraffic=\"true\"\n    \n    android:networkSecurityConfig=\"@xml/network_security_config\"\n    ```\n    \n\n이걸 하고 바로 prebuild를 다시 돌리면 androidmanifest 가 덮어씌워질 수 있음 이걸 방지하기 위해서 config plugin 을 통해 빌드 때마다 자동 주입되게 만드는 방법이 있음 \n\n```jsx\nconst { withAndroidManifest, withDangerousMod } = require(\"@expo/config-plugins\");\nconst fs = require(\"fs\");\nconst path = require(\"path\");\n\nmodule.exports = function withNetworkSecurityConfig(config) {\n  // 1) res/xml/network_security_config.xml 생성/갱신\n  config = withDangerousMod(config, [\n    \"android\",\n    async (cfg) => {\n      const projectRoot = cfg.modRequest.projectRoot;\n      const xmlDir = path.join(projectRoot, \"android\", \"app\", \"src\", \"main\", \"res\", \"xml\");\n      const xmlPath = path.join(xmlDir, \"network_security_config.xml\");\n\n      fs.mkdirSync(xmlDir, { recursive: true });\n\n      const xml = `<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<network-security-config>\n  <base-config cleartextTrafficPermitted=\"true\" />\n</network-security-config>\n`;\n      fs.writeFileSync(xmlPath, xml, \"utf8\");\n      return cfg;\n    },\n  ]);\n\n  // 2) AndroidManifest.xml application에 속성 강제 주입\n  config = withAndroidManifest(config, (cfg) => {\n    const app = cfg.modResults.manifest.application?.[0];\n    if (app) {\n      app.$[\"android:usesCleartextTraffic\"] = \"true\";\n      app.$[\"android:networkSecurityConfig\"] = \"@xml/network_security_config\";\n    }\n    return cfg;\n  });\n\n  return config;\n};\n\n```\n\nios에서는 기본적으로 차단을 안하나? ios에서는 서버 연결 잘 된 이유\n\n- 기본적으로 보안 안된 HTTP를 막긴 함\n- 하지만 나는 iOS에서 NSExceptionDomains에 http ip 주소를 넣어놨고 NSExceptionAllowsInsecureHTTPLoads : true 로 HTTP 예외를 허용해둔 상태\n- android 에서는 cleartext 트래픽을 차단하는 정책이 생겼고\n- iOS처럼 info.plist 한 덩어리로 예외가 잡히는게아니라 usesCleartextTraffic, network_security_config 같은걸로 명시적 허용 필요\n\n### 정리하자면\n\n- iOS에서는 NSExceptionDomains로 예외 허용해놨고 (app.json)\n- android 에서는 app.json 말고도 네이티브 폴더에 설정되어야 하는 파일이 있는데 prebuild를 할때 없어져버려서 에러가 다시 생긴 거임",
+    "span_problems": []
+  }
+]

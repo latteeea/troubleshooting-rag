@@ -1,0 +1,89 @@
+[
+  {
+    "title": "EAS Android 빌드 prepare project 단계 tar Permission denied (OneDrive 동기화 해제 후 NTFS 권한/ACL 꼬임)",
+    "tech_stack": [
+      "EAS CLI",
+      "Expo",
+      "tar",
+      "PowerShell",
+      "Windows NTFS",
+      "OneDrive"
+    ],
+    "keywords": [
+      "tar: .idea/.gitignore: Cannot open: Permission denied",
+      "Cannot mkdir: Permission denied",
+      "prepare project",
+      "eas build",
+      "attrib -R * /S /D",
+      "takeown /F . /R /D Y",
+      "icacls . /inheritance:e /grant:r \"$env:USERNAME:(OI)(CI)F\" /T",
+      "tar -cf test.tar .",
+      "TEMP/TMP",
+      "ACL",
+      "SID"
+    ],
+    "source_lines": [
+      {
+        "start_line": 3,
+        "end_line": 4
+      },
+      {
+        "start_line": 6,
+        "end_line": 13
+      },
+      {
+        "start_line": 15,
+        "end_line": 17
+      },
+      {
+        "start_line": 24,
+        "end_line": 24
+      },
+      {
+        "start_line": 34,
+        "end_line": 56
+      },
+      {
+        "start_line": 60,
+        "end_line": 97
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "iOS 빌드와 auto submit은 성공했으나 안드로이드 EAS 빌드의 prepare project 단계에서 tar 압축 해제 중 `.idea/...`, `.vscode/...`, `app/(tabs)` 등에 대해 `Cannot open` / `Cannot mkdir: Permission denied` 에러가 발생했다.",
+    "context": "OneDrive/Desktop에서 프로젝트를 쓰다가 동기화가 귀찮고 경로 권한 에러가 많아 OneDrive 동기화를 중지하고, 프로젝트를 C:/users/kimta/desktop으로 옮긴 뒤 안드로이드 빌드를 시도한 상황 (Windows).",
+    "attempts": [
+      {
+        "hypothesis": "Desktop이 보호 폴더라서 권한 문제가 생겼을 것이라 보고 C:/dev/{프로젝트}로 프로젝트를 옮겼다.",
+        "result": "rejected",
+        "evidence": "옮긴 뒤에도 같은 에러로 실패했고, PowerShell 관리자 권한으로 실행해도 동일하게 실패해 desktop 문제가 아니라고 판단했다."
+      },
+      {
+        "hypothesis": "로컬 tar 자체가 문제인지 `tar -cf test.tar .` 로 확인했다.",
+        "result": "rejected",
+        "evidence": "로컬 tar는 잘 동작했다. 그러나 이후 eas build는 여전히 실패했다."
+      },
+      {
+        "hypothesis": "EAS가 프로젝트를 임시 작업 폴더에 풀 때 그 경로(구 OneDrive 경로)에 쓰기 권한이 없을 것이라 의심하고 TEMP/TMP 경로를 확인했다.",
+        "result": "rejected",
+        "evidence": "TEMP/TMP는 OneDrive가 아닌 C 하위 appdata/local에 정상 위치해 있었다."
+      },
+      {
+        "hypothesis": "파일/폴더의 NTFS 권한/속성(ACL/읽기전용/소유자)이 꼬여 있을 것이라 보고 관리자 PowerShell에서 읽기 전용 속성 제거, 소유권 강제 지정, 권한 재부여 및 상속 활성화를 수행했다.",
+        "result": "confirmed",
+        "evidence": "세 명령 실행 후 eas build가 성공했다."
+      }
+    ],
+    "root_cause": "OneDrive가 Desktop을 리디렉션한 상태에서 만든 프로젝트가 동기화 해제(리디렉션 해제, 파일 재배치/복사/분리) 과정에서 일부 파일의 소유자 SID 또는 ACL 상속 체인이 변경되었을 가능성이 높다. NTFS는 같은 볼륨 내 이동 시 ACL을 유지하므로 C:\\dev로 옮겨도 비정상 권한이 그대로 남았고, EAS Build가 스테이징 디렉토리 생성/복사 단계(mkdir)에서 Permission denied가 발생했다. 일반 tar는 읽기 중심이라 통과했다.",
+    "resolution": "관리자 PowerShell에서 (1) `attrib -R * /S /D` 로 읽기 전용 속성 제거, (2) `takeown /F . /R /D Y` 로 소유권을 현재 사용자로 지정, (3) `icacls . /inheritance:e /grant:r \"$env:USERNAME:(OI)(CI)F\" /T` 로 권한 상속 활성화 및 현재 계정 Full Control 재부여. 이후 eas build 성공.",
+    "insights": [
+      "일반 tar는 읽기 중심이고 EAS는 스테이징 디렉토리 생성 + 복사 + 권한 처리를 수행하므로, 소유자/ACL 상속이 비정상이면 mkdir 단계에서 실패한다.",
+      "같은 NTFS 볼륨 내 이동은 ACL을 그대로 유지하므로 폴더를 옮겨도 권한 문제가 해결되지 않는다.",
+      "OneDrive 동기화를 끊으면 바로가기 링크가 깨지거나 SID/ACL 문제로 접근이 거부될 수 있다."
+    ],
+    "card_id": "android_build_error-card-0",
+    "filename": "android_build_error.md",
+    "source": "data/public/android_build_error.md",
+    "raw_text": "> - 원인: 일부 파일/폴더가 다른 소유자/권한 상태로 남아있어서(복사, 압축 해제, 깃/툴, 권한 상속 끊김 등) EAS가 접근 실패\n> - 해결: 프로젝트 루트에 대해 **권한 상속 활성화 + 내 계정 Full Control 재부여**\n\nondrive/desktop 에 프로젝트 폴더 사용하다가\n\nonedrive 동기화 되는게 귀찮고 폴더 경로에 따른 권한 에러가 많이 나서 ondrive 동기화를 중지 시킴 \n\n하고 ondrive/desktop 에 있던 프로젝트를 c:/users/kimta/desktop 에 옮김 \n\nios 빌드와 auto submit 까지는 잘 됐는데 안드로이드 빌드할 때 prepare project 단계에서 경로를 못 찾는 에러 발생 (권한)\n\n\ntar: .idea/.gitignore: Cannot open: Permission denied\ntar: .idea/insole-app.iml: Cannot open: Permission denied\ntar: .idea/inspectionProfiles: Cannot mkdir: Permission denied\n\ntar: app/(tabs): Cannot mkdir: Permission denied\n\ntar 압축을 푸는 것에 대한 에러였는데 일단 권한 에러라서 desktop이 아닌 C:/dev/{프로젝트} 로 아예 C 하위로 옮겨봤다 (desktop이 보호 폴더인 경우가 많다고 지피티가 그럼)\n\npowershell 관리자 권한으로 실행해서 다시 해봤는데 또 같은 에러로 실패 → desktop 문제 아님\n\n`tar -cf test.tar .` ← 이 명령어로 tar 이 되는지 확인해봤는데 잘되는 것 확인 \n\n로컬에서 permission 에러 안나니까 이제 되겠지 → eas build 시도 → but 실패\n\n⇒ EAS CLI의 문제다! EAS가 내부적으로 다른 tar 를 쓰거나 EAS가 만드는 임시 폴더/아카이브 과정에서 권한이 막히는 것\n\n→ EAS CLI가 프로젝트를 임시 작업 폴더에 풀어놓고(스테이징) tar 작업을 하는데 그 임시 폴더 경로가 쓰기 권한이 없는(구: onedrive 경로)곳으로 잡혀있어서 tar가 디렉토리 생성/파일 쓰기를 못 하는 상황\n\nTEMP/TMP 경로 확인해봤더니 onedrive에 있는게  아니라 C 하위의 appdata/local에 정상으로 위치해 있음. 이게 문제가 아니고\n\n⇒ tar 에서 permission denied가 되는게 아니라, 파일/폴더의 NTFS 권한/속성(ACL/읽기전용/소유자) 이 꼬여있는 상태\n\n→ powershell 관리자 권한으로\n\n1. 읽기 전용 속성 제거 `attrib -R * /S /D` \n2. 소유권을 현재 사용자로 강제 지정 `takeown /F . /R /D Y`\n3. 권한을 현재 사용자 full control로 재부여 + 상속 켜기 `icacls . /inheritance:e /grant:r \"$env:USERNAME:(OI)(CI)F\" /T`\n\n하고 eas build했더니 성공 \n\nondrive/desktop이 바탕화면에 보이게 해둔 상태에서 동기화를 끊으니까 바탕화면에 바로가기로 되어 있던 폴더나 프로그램들이 실행할 수 없다고 뜬 적이 있음 → 여기서 계정에 대한 상속 체인이 변경되었을 것으로 예측 \n\n동기화를 끊을 시 윈도우는\n\n- 경로 재지정을 원래 위치로 되돌리거나\n- ondrive 폴더를 분리하거나\n- 로컬 복사하거나 하는데\n\n이 과정에서 내가 겪은 증상을 보자면 두가지 가능성이 있음\n\n- 대상 경로가 바뀌어서 링크가 깨짐 (onedrive 경로 기반으로 바로가기면, 동기화 해제 시 대상이 사라져서 실행 불가)\n- 파일은 있는데 접근 권한이 달라짐 (SID/ACL 문제로 엑세스 거부된 상태)\n\n이게 eas 문제로 이어진 이유\n\n- onedrive desktop 하위에서 생성된 파일들을\n- OneDrive 리디렉션 해제 과정에서 파일/폴더의 소유자 SID 또는 ACL 상속 구조가 변경되었고,\n- 이후 동일 볼륨 내 이동(C:/dev 하위)은 그 상태를 그대로 유지했을 가능성이 높다.\n\n## 📌 문제 발생 흐름 정리\n\n1. OneDrive가 Desktop을 리디렉션한 상태에서 프로젝트를 생성\n2. OneDrive 동기화를 해제하면서:\n    - Desktop 경로 재지정 해제\n    - 파일 재배치/복사/분리 과정 발생\n    - 이 과정에서 일부 파일의 **소유자 SID 또는 ACL 상속 체인이 변경되었을 가능성**\n3. 이후 동일 C: 드라이브 내에서 `C:\\dev`로 이동\n    - NTFS는 같은 볼륨 이동 시 ACL을 그대로 유지\n    - 즉, 이미 비정상 상태였던 권한 구조가 그대로 유지됨\n4. EAS Build가 프로젝트를 스테이징하면서 디렉토리 생성/복사 단계에서 `Permission denied` 발생\n\n---\n\n## 📌 왜 일반 tar는 되고 EAS만 실패했을까?\n\n- 일반 `tar`는 “읽기 중심”\n- EAS는 스테이징 디렉토리 생성 + 복사 + 권한 처리 수행\n- 소유자/ACL 상속 구조가 비정상이면 mkdir 단계에서 실패",
+    "span_problems": []
+  }
+]

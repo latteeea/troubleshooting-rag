@@ -1,0 +1,200 @@
+[
+  {
+    "title": "FastAPI 실행 시 8000번 포트 'Address already in use' - 옛 systemd 서비스가 포트 점유",
+    "tech_stack": [],
+    "keywords": [
+      "Address already in use",
+      "systemd",
+      "/srv/insole-server/",
+      "ps -ef | grep 8000",
+      "systemctl stop",
+      "systemctl disable",
+      "systemctl restart insole-api"
+    ],
+    "source_lines": [
+      {
+        "start_line": 1,
+        "end_line": 23
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "신규 FastAPI 서비스를 실행하려는데 `Address already in use` 에러가 발생하며 8000번 포트를 사용하지 못함.",
+    "context": "신규 FastAPI 서비스(insole-api) 실행 시도. 과거에 /srv/insole-server/ 경로에서 실행했던 옛날 서비스가 서버에 남아 있었음.",
+    "attempts": [
+      {
+        "hypothesis": "8000번 포트를 쓰는 프로세스가 있는지 `ps -ef | grep 8000`으로 PID 확인",
+        "result": "confirmed",
+        "evidence": "점유 중인 프로세스(PID)를 찾아냄"
+      },
+      {
+        "hypothesis": "`grep -r`로 /etc/systemd/system/ 에서 해당 프로세스를 실행하는 서비스 파일명 탐색",
+        "result": "confirmed",
+        "evidence": "/srv 경로를 바라보던 옛날 서비스를 찾아냄"
+      }
+    ],
+    "root_cause": "과거 /srv/insole-server/ 경로에서 실행했던 옛날 서비스 프로세스가 systemd 서비스로 등록되어 8000번 포트를 이미 점유하고 있었음.",
+    "resolution": "옛날 서비스를 `systemctl stop`과 `systemctl disable`로 중단·비활성화한 뒤 `systemctl restart insole-api`로 진짜 서비스를 실행.",
+    "insights": [],
+    "card_id": "nginx_deploy-card-0",
+    "filename": "nginx_deploy.md",
+    "source": "data/public/nginx_deploy.md",
+    "raw_text": "## 1. 포트 점유 충돌: \"왜 내 서비스가 8000번 포트를 못 쓰지?\"\n\n### **문제 상황**\n\n신규 FastAPI 서비스를 실행하려는데 `Address already in use` 에러가 발생하며 8000번 포트를 사용하지 못함.\n\n### **원인**\n\n과거에 `/srv/insole-server/` 경로에서 실행했던 옛날 서비스 프로세스가 시스템 서비스(systemd)로 등록되어 이미 8000번 포트를 점유하고 있었음.\n\n### **해결 과정**\n\n1. `ps -ef | grep 8000`으로 범인 프로세스 PID 확인.\n2. `grep -r`을 이용해 `/etc/systemd/system/`에서 해당 프로세스를 실행 중인 서비스 파일명 탐색.\n3. `/srv` 경로를 바라보던 유령 서비스를 중단.\n\n### **최종 해결**\n\nBash\n\n`sudo systemctl stop [옛날서비스명]\nsudo systemctl disable [옛날서비스명]\nsudo systemctl restart insole-api  # 진짜 서비스 실행`",
+    "span_problems": []
+  },
+  {
+    "title": "Nginx 405 Not Allowed - /api/ POST 요청이 백엔드로 전달되지 않음",
+    "tech_stack": [
+      "Nginx",
+      "FastAPI",
+      "Vite"
+    ],
+    "keywords": [
+      "405 Not Allowed",
+      "location /api/",
+      "proxy_pass",
+      "sites-available",
+      "proxy"
+    ],
+    "source_lines": [
+      {
+        "start_line": 27,
+        "end_line": 43
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "로그인 버튼을 눌렀는데 `405 Not Allowed` 에러 발생.",
+    "context": "배포 환경에서 Nginx 뒤에 FastAPI 백엔드와 Vite 프론트를 둔 구성.",
+    "attempts": [
+      {
+        "hypothesis": "Vite의 proxy 설정이 배포 환경에서도 /api 요청을 넘겨줄 것이라 생각",
+        "result": "rejected",
+        "evidence": "Vite의 proxy 설정은 로컬 개발용일 뿐이며 배포 환경에서는 Nginx가 그 역할을 대신해야 함을 인지"
+      }
+    ],
+    "root_cause": "Nginx가 /api/ 요청을 백엔드(FastAPI)로 넘기지 않고 자신의 정적 파일 폴더에서 `/api`라는 파일을 찾으려 함. Nginx는 기본적으로 정적 파일에 대한 POST 요청을 허용하지 않음.",
+    "resolution": "Nginx 설정 파일(sites-available)에 `location /api/` 블록을 추가하고 `proxy_pass`로 8000번 포트에 연결.",
+    "insights": [
+      "Vite proxy는 로컬 개발용이므로 배포 환경에서는 Nginx가 프록시 역할을 해야 한다."
+    ],
+    "card_id": "nginx_deploy-card-1",
+    "filename": "nginx_deploy.md",
+    "source": "data/public/nginx_deploy.md",
+    "raw_text": "## 2. Nginx 405 Method Not Allowed: \"POST 요청이 왜 안 돼?\"\n\n### **문제 상황**\n\n로그인 버튼을 눌렀는데 `405 Not Allowed` 에러 발생.\n\n### **원인**\n\nNginx가 `/api/` 요청을 백엔드(FastAPI)로 넘겨주지 않고, 자신의 정적 파일 폴더에서 `/api`라는 파일을 찾으려 함. Nginx는 기본적으로 정적 파일에 대한 `POST` 요청을 허용하지 않음.\n\n### **해결 과정**\n\nVite의 `proxy` 설정은 로컬 개발용일 뿐, 배포 환경에서는 Nginx가 그 역할을 대신해야 함을 인지.\n\n### **최종 해결**\n\nNginx 설정 파일(`sites-available`)에 `location /api/` 블록을 추가하고 `proxy_pass`로 8000번 포트 연결.",
+    "span_problems": []
+  },
+  {
+    "title": "Nginx 500/403 Permission Denied - www-data가 홈 디렉토리 내 빌드 파일에 접근 불가",
+    "tech_stack": [
+      "Nginx",
+      "Linux"
+    ],
+    "keywords": [
+      "500 Internal Server Error",
+      "403 Forbidden",
+      "Permission denied",
+      "www-data",
+      "try_files",
+      "/var/log/nginx/error.log",
+      "chmod 755 /home/ubuntu"
+    ],
+    "source_lines": [
+      {
+        "start_line": 47,
+        "end_line": 69
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "웹사이트 접속 시 흰 화면이 뜨거나 이미지(assets) 로딩 시 `500 Internal Server Error` 또는 `403 Forbidden` 발생.",
+    "context": "빌드 파일이 사용자 홈 디렉토리(/home/ubuntu) 내부에 있는 상태에서 Nginx로 서비스.",
+    "attempts": [
+      {
+        "hypothesis": "Nginx 에러 로그(/var/log/nginx/error.log) 확인",
+        "result": "confirmed",
+        "evidence": "`Permission denied` 확인"
+      },
+      {
+        "hypothesis": "상위 폴더 /home/ubuntu부터 실행 권한(+x)이 있는지 체크",
+        "result": "confirmed",
+        "evidence": "상위 폴더부터 권한 문제가 있어 접근이 막힘"
+      }
+    ],
+    "root_cause": "Nginx 실행 계정(www-data)이 /home/ubuntu 내부 빌드 파일에 접근할 권한이 없었고, 권한이 막히자 Nginx가 try_files 설정에 의해 무한 루프에 빠짐.",
+    "resolution": "상위 폴더부터 하위 빌드 파일까지 접근 권한 부여: `sudo chmod 755 /home/ubuntu`, `sudo chmod -R 755 /var/www/manage/dist`.",
+    "insights": [],
+    "card_id": "nginx_deploy-card-2",
+    "filename": "nginx_deploy.md",
+    "source": "data/public/nginx_deploy.md",
+    "raw_text": "## 3. Nginx 500/403 Permission Denied: \"파일은 있는데 왜 못 읽니?\"\n\n### **문제 상황**\n\n웹사이트 접속 시 흰 화면이 뜨거나 이미지(assets) 로딩 시 `500 Internal Server Error` 또는 `403 Forbidden` 발생.\n\n### **원인**\n\nNginx 실행 계정(`www-data`)이 사용자의 홈 디렉토리(`/home/ubuntu`) 내부에 있는 빌드 파일에 접근할 권한이 없었음. 권한이 막히자 Nginx가 `try_files` 설정에 의해 무한 루프에 빠짐.\n\n### **해결 과정**\n\n1. Nginx 에러 로그(`/var/log/nginx/error.log`)에서 `Permission denied` 확인.\n2. 상위 폴더인 `/home/ubuntu`부터 실행 권한(`+x`)이 있는지 체크.\n\n### **최종 해결**\n\n상위 폴더부터 하위 빌드 파일까지 Nginx가 접근할 수 있도록 권한 부여.\n\nBash\n\n`sudo chmod 755 /home/ubuntu\nsudo chmod -R 755 /var/www/manage/dist`",
+    "span_problems": []
+  },
+  {
+    "title": "Nginx 404 및 엉뚱한 AWS CLI 파일 노출 - root가 가짜 dist 폴더를 가리킴",
+    "tech_stack": [
+      "Nginx",
+      "AWS CLI"
+    ],
+    "keywords": [
+      "404",
+      "dist",
+      "/home/ubuntu/aws/dist",
+      "find / -name \"index.html\"",
+      "/var/www/manage/dist",
+      "root"
+    ],
+    "source_lines": [
+      {
+        "start_line": 73,
+        "end_line": 90
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "Nginx 설정을 마쳤는데도 계속 404가 뜨거나, 뜬금없이 AWS CLI 관련 파일들만 보임.",
+    "context": "서버 내에 `dist`라는 이름의 폴더가 여러 개 존재하는 환경.",
+    "attempts": [
+      {
+        "hypothesis": "`find / -name \"index.html\"`로 서버 전체에서 진짜 관리자 페이지 빌드물 위치를 수색",
+        "result": "confirmed",
+        "evidence": "`/var/www/manage/dist`라는 진짜 경로를 찾아냄"
+      }
+    ],
+    "root_cause": "서버에 dist 폴더가 여러 개 있었고, /home/ubuntu/aws/dist는 AWS CLI 설치 파일인데 Nginx가 이곳을 웹사이트 루트로 바라보고 있었음.",
+    "resolution": "Nginx 설정 파일의 `root` 경로를 가짜 폴더(~/aws/dist)에서 진짜 폴더(/var/www/manage/dist)로 수정.",
+    "insights": [],
+    "card_id": "nginx_deploy-card-3",
+    "filename": "nginx_deploy.md",
+    "source": "data/public/nginx_deploy.md",
+    "raw_text": "## 4. 경로 미스터리: \"내가 알던 dist가 그 dist가 아니다\"\n\n### **문제 상황**\n\nNginx 설정을 마쳤는데도 계속 404가 뜨거나, 뜬금없이 AWS CLI 관련 파일들만 보임.\n\n### **원인**\n\n서버 내에 `dist`라는 이름의 폴더가 여러 개 존재함. 특히 `/home/ubuntu/aws/dist`는 AWS CLI 설치 파일이었는데, Nginx가 이곳을 웹사이트 루트로 바라보고 있었음.\n\n### **해결 과정**\n\n1. `find / -name \"index.html\"` 명령어로 서버 전체에서 진짜 관리자 페이지 빌드물이 어디 있는지 수색.\n2. `/var/www/manage/dist`라는 진짜 경로를 찾아냄.\n\n### **최종 해결**\n\nNginx 설정 파일의 `root` 경로를 가짜 폴더(`~/aws/dist`)에서 진짜 폴더(`/var/www/manage/dist`)로 전격 수정.",
+    "span_problems": []
+  },
+  {
+    "title": "블로그 포스팅 초안 메모: EC2 React + FastAPI 배포 Nginx 삽질기",
+    "tech_stack": [
+      "EC2",
+      "React",
+      "FastAPI",
+      "Nginx"
+    ],
+    "keywords": [
+      "tail -f /var/log/nginx/error.log",
+      "git push",
+      "scp"
+    ],
+    "source_lines": [
+      {
+        "start_line": 94,
+        "end_line": 98
+      }
+    ],
+    "kind": "note",
+    "summary": "블로그 포스팅용 제목과 핵심 교훈, 마무리 구성을 정리한 메모. 제목 추천은 \"EC2에서 React + FastAPI 배포하며 겪은 Nginx 삽질기 (403, 404, 405, 500 완벽 정리)\". 핵심 교훈은 Nginx 설정을 바꿨다면 반드시 에러 로그를 먼저 확인하자는 것. 마무리로 백엔드는 git push 자동 배포, 프론트는 scp 수동 배포로 이원화한 워크플로우를 소개할 계획.",
+    "claims": [
+      "Nginx 설정을 바꿨다면 반드시 에러 로그(`tail -f /var/log/nginx/error.log`)를 먼저 확인하자",
+      "백엔드는 `git push` 자동 배포, 프론트는 `scp` 수동 배포로 이원화하여 관리"
+    ],
+    "card_id": "nginx_deploy-card-4",
+    "filename": "nginx_deploy.md",
+    "source": "data/public/nginx_deploy.md",
+    "raw_text": "### **💡 블로그 포스팅**\n\n- **제목 추천:** \"EC2에서 React + FastAPI 배포하며 겪은 Nginx 삽질기 (403, 404, 405, 500 완벽 정리)\"\n- **핵심 교훈:** \"Nginx 설정을 바꿨다면 반드시 에러 로그(`tail -f /var/log/nginx/error.log`)를 먼저 확인하자!\"\n- **마무리:** 백엔드는 `git push` 자동 배포, 프론트는 `scp` 수동 배포로 이원화하여 관리하는 효율적인 워크플로우 소개.",
+    "span_problems": []
+  }
+]

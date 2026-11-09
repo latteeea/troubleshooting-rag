@@ -1,0 +1,63 @@
+[
+  {
+    "title": "RN Text.defaultProps.allowFontScaling=false 전역 설정이 적용되지 않음 – AppText 래퍼로 교체",
+    "tech_stack": [
+      "React Native",
+      "Expo",
+      "expo-router"
+    ],
+    "keywords": [
+      "Component.defaultProps.allowFontScaling = false",
+      "Text.defaultProps",
+      "allowFontScaling",
+      "maxFontSizeMultiplier",
+      "index.js",
+      "expo-router/entry",
+      "app/_layout.tsx",
+      "AppText",
+      "AppHeader",
+      "Fabric"
+    ],
+    "source_lines": [
+      {
+        "start_line": 3,
+        "end_line": 3
+      },
+      {
+        "start_line": 9,
+        "end_line": 41
+      }
+    ],
+    "kind": "troubleshooting",
+    "symptom": "시스템 폰트 사이즈를 반영하지 않고 앱에서 설정한 크기 그대로 보이게 하려고 루트 파일에 `Component.defaultProps.allowFontScaling = false;`를 설정했으나 먹지 않음.",
+    "context": "학산 QA 작업 중 발생. 시스템 폰트 사이즈 설정과 무관하게 앱에서 지정한 크기로 텍스트를 보여야 하는 요구사항.",
+    "attempts": [
+      {
+        "hypothesis": "index.js에서 해당 설정이 특정 환경에서 먹히지 않는 케이스가 다수 보고된 이슈(react-native issue 51113)와 같은 문제로, 적용 타이밍/엔트리포인트 문제 또는 일부 RN 버전/신 아키텍처 관련 이슈로 의심",
+        "result": "partial",
+        "evidence": "관련 GitHub 이슈를 참고해 의심했으나 이것만으로 원인이 확정되지는 않음"
+      },
+      {
+        "hypothesis": "index.js를 만들고 메인 엔트리를 index.js로 지정해 index.js → expo runtime → expo router 초기화 → app/_layout.tsx 순서로 실행되게 한 뒤, 그 안에서 Text/TextInput의 defaultProps(allowFontScaling=false, maxFontSizeMultiplier=1)를 설정하고 expo-router/entry를 import",
+        "result": "rejected",
+        "evidence": "이렇게 했지만 defaultProps 방식이 여전히 먹지 않음"
+      },
+      {
+        "hypothesis": "런타임에 Text 객체 속성을 수정하는 대신 컴파일 타임 치환 방식으로, Text 대신 AppText를 사용하도록 코드를 바꾸면 RN 내부 구조나 Fabric 영향 없이 안정적으로 적용 가능",
+        "result": "confirmed",
+        "evidence": "AppHeader의 텍스트는 allowFontScaling = false로 되어 있어 시스템 설정에 영향을 받지 않음을 확인"
+      }
+    ],
+    "root_cause": "iOS/Android/Expo 정책이나 엔트리포인트 문제가 아니라, RN 최신 구조에서 전역 defaultProps 패치가 더 이상 안전하지 않기 때문. 전역 defaultProps로 Text를 막는 방식은 공식적으로 보장되지 않음.",
+    "resolution": "AppText 래퍼를 만들어 기존 Text를 전부 교체한다.",
+    "insights": [
+      "런타임에 Text.defaultProps를 수정하는 방식 대신, 부품 자체를 바꿔 끼우는 컴파일 타임 치환 방식(AppText)을 쓰자.",
+      "전역 defaultProps로 Text를 제어하는 방식은 공식적으로 보장되지 않는다."
+    ],
+    "card_id": "system_font_setting-card-0",
+    "filename": "system_font_setting.md",
+    "source": "data/public/system_font_setting.md",
+    "raw_text": "학산 QA : 시스템 폰트 사이즈 반영하지 않고 앱에서 설정한 크기 그대로 보이기 \n\n- 문제: \n`Component.defaultProps.allowFontScaling = false;`\n    - 루트 파일의 해당 설정이 먹지 않음\n- 과정\n    - https://github.com/facebook/react-native/issues/51113?utm_source=chatgpt.com → index.js에서 해당 설정이 특정 환경에서 먹히지 않는 케이스 다수 발생\n    - 적용 타이밍/엔트리포인트 문제 또는 일부 RN 버전/신 아키텍처 관련 이슈 의심\n        - 엔트리포인트 : index.js 생성 후에 메인엔트리를 index.js 로해서 \n        index.js → expo runtime → expo router 초기화 → app/_layout.tsx \n        이렇게 했지만 defaultProps 방식 여전히 안 먹음\n        \n        ```jsx\n        import { Text, TextInput } from \"react-native\";\n        \n        Text.defaultProps = Text.defaultProps || {};\n        Text.defaultProps.allowFontScaling = false;\n        Text.defaultProps.maxFontSizeMultiplier = 1;\n        \n        TextInput.defaultProps = TextInput.defaultProps || {};\n        TextInput.defaultProps.allowFontScaling = false;\n        TextInput.defaultProps.maxFontSizeMultiplier = 1;\n        \n        // 그 다음 expo-router 실행\n        import \"expo-router/entry\";\n        ```\n        \n    - 런타임이 아닌 컴파일 타임 치환 방식을 사용하자! (공장에서 조립하기 전에 부품 자체를 바꿔 끼워 생산하는 것)\n        - Text.defaultProps 는 RN이 가진 Text라는 객체의 속성을 런타임에 수정하는 건데 Text가 아닌 AppText로 코드를 바꾸면 RN 내부 구조나 Fabric 영향 없이 안정적으로 적용할 수 있음\n    - AppHeader의 텍스트에서는 시스템 설정에 영향을 받지 않음 (allowFontScaling = false 로 되어 있기 때문에)\n- 원인: iOS/Android/Expo 정책 때문이 아니고 엔트리포인트도 아니고 RN 최신 구조에서의 전역 defaultProps 패치가 더 이상 안전하지 않은 것.\n    \n    ⇒ 전역 defaultProps로 Text를 막는 방식은 공식적으로 보장되지 않는다. \n    \n- 해결: AppText 래퍼 만들어서 전부 교체하기,,",
+    "span_problems": []
+  }
+]

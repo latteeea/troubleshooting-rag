@@ -14,3 +14,6 @@ venv/
 
 # 골든셋 비공개분
 eval/golden_private.yaml
+
+# 비공개 문서에서 추출한 카드
+cards/private/

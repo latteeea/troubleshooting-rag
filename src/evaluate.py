@@ -190,7 +190,7 @@ def summarize(records: list[dict], label: str, reps: int) -> str:
 
     lines = [f"# 평가 결과: {label}", ""]
     lines.append(f"- judge: {JUDGE_MODEL} (effort={JUDGE_EFFORT}), pass 기준: coverage >= {PASS_THRESHOLD}")
-    lines.append(f"- 반복: {reps}회, 검색: {STRATEGY} 청킹 top-{K}, 시스템 LLM: {llm.MODEL_NAME}")
+    lines.append(f"- 반복: {reps}회, 검색: {STRATEGY} top-{K}, 시스템 LLM: {llm.MODEL_NAME}")
     lines.append(f"- 실행 {len(records)}건, 에러 {len(errors)}건")
     lines.append("")
 
@@ -269,6 +269,7 @@ def summarize(records: list[dict], label: str, reps: int) -> str:
 # ---------------------------------------------------------------- main
 
 def main():
+    global STRATEGY
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", required=True)
     parser.add_argument("--reps", type=int, default=3)
@@ -276,8 +277,10 @@ def main():
     parser.add_argument("--sets", default="public,private")
     parser.add_argument("--ids", default="", help="쉼표로 구분한 문항 id만 실행")
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--strategy", default=STRATEGY, choices=["markdown", "recursive", "card"])
     parser.add_argument("--from-raw", default="", help="쉼표로 구분한 기존 raw 라벨들을 합쳐 재집계만 한다 (API 호출 없음)")
     args = parser.parse_args()
+    STRATEGY = args.strategy
 
     if args.from_raw:
         golden = {it["id"]: it for it in load_golden(["public", "private"])}
