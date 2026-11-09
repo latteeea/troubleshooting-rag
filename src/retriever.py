@@ -1,21 +1,40 @@
-from config import MARKDOWN_INDEX_DIR, RECURSIVE_INDEX_DIR
+from functools import lru_cache
+
+from langchain_core.documents import Document
+
+from config import CARD_INDEX_DIR, MARKDOWN_INDEX_DIR, RECURSIVE_INDEX_DIR
 from vectorstore import load_faiss_vectorstore
 
+INDEX_DIRS = {
+    "recursive": RECURSIVE_INDEX_DIR,
+    "markdown": MARKDOWN_INDEX_DIR,
+    "card": CARD_INDEX_DIR,
+}
+
+
+@lru_cache(maxsize=None)
+def _load_vectorstore(strategy: str):
+    # Day3-3: 검색 호출마다 인덱스를 디스크에서 다시 읽던 것을 전략별 1회 로드로 변경
+    if strategy not in INDEX_DIRS:
+        raise ValueError(f"strategy must be one of {list(INDEX_DIRS)}, got {strategy!r}")
+    return load_faiss_vectorstore(INDEX_DIRS[strategy])
+
+
 def get_retriever(strategy: str = "recursive", k: int = 4):
-    if strategy == "recursive":
-        vectorstore = load_faiss_vectorstore(RECURSIVE_INDEX_DIR)
-    elif strategy == "markdown":
-        vectorstore = load_faiss_vectorstore(MARKDOWN_INDEX_DIR)
-    else:
-        raise ValueError("strategy must be either 'recursive" or 'markdown')
-    
-    return vectorstore.as_retriever(
-        search_kwargs={"k": k}
-    )
+    return _load_vectorstore(strategy).as_retriever(search_kwargs={"k": k})
     
 def retrieve(query: str, strategy: str = "recursive", k: int = 4):
-    retriever = get_retriever(strategy=strategy, k=k)
-    return retriever.invoke(query)
+    docs = get_retriever(strategy=strategy, k=k).invoke(query)
+    if strategy == "card":
+        # Day3-4: 카드로 찾고, 생성에는 카드 + 원문 구간을 함께 넘긴다 (근거는 항상 원문)
+        docs = [
+            Document(
+                page_content=f"{d.page_content}\n\n[원문]\n{d.metadata['raw_text']}",
+                metadata=d.metadata,
+            )
+            for d in docs
+        ]
+    return docs
 
 def print_results(query: str, strategy: str = "recursive", k: int = 4):
     docs = retrieve(query = query, strategy=strategy, k=k)

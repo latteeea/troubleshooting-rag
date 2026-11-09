@@ -19,7 +19,7 @@ def retrieve_node(state: GraphState) -> dict:
 
 def grade_documents_node(state: GraphState) -> dict:
     print("==== [GRADE DOCUMENTS] ====")
-    question = state["question"]
+    question = state["original_question"]  # Day3-3: 판정·생성은 원 질문 기준
     documents = state["documents"]
 
     filtered_docs = []
@@ -43,7 +43,7 @@ UNVERIFIED_NOTE = "\n\n※ 이 답변의 일부 내용은 기록에서 근거를
 
 def generate_node(state: GraphState) -> dict:
     print("==== [GENERATE] ====")
-    question = state["question"]
+    question = state["original_question"]  # Day3-3: 판정·생성은 원 질문 기준
     documents = state["documents"]
     generation = generate(
         question,
@@ -57,8 +57,9 @@ def generate_node(state: GraphState) -> dict:
 
 def transform_query_node(state: GraphState) -> dict:
     print("==== [TRANSFORM QUERY] ====")
-    question = state["question"]
-    better_question = rewrite_question(question)
+    # Day3-3: 재작성된 쿼리를 다시 재작성하면 원 질문에서 점점 멀어지므로 항상 원 질문에서 출발한다
+    previous = state["question"] if state.get("rewrite_count", 0) > 0 else ""
+    better_question = rewrite_question(state["original_question"], previous_query=previous)
     rewrite_count = state.get("rewrite_count", 0) + 1
     print(f"==== REWRITTEN: {better_question} ====")
     # 새 검색 결과에는 이전 피드백이 맞지 않으므로 비운다 (생성 횟수 상한은 전체 기준으로 유지)
@@ -102,7 +103,7 @@ def check_generation_node(state: GraphState) -> dict:
     지금은 항상 검사하고, 상한 처리는 route_after_check에서 한다.
     """
     print("==== [CHECK HALLUCINATIONS] ====")
-    question = state["question"]
+    question = state["original_question"]  # Day3-3: 판정·생성은 원 질문 기준
     generation = state["generation"]
 
     facts = format_docs(state["documents"])

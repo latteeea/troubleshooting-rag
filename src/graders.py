@@ -41,9 +41,11 @@ QUESTION_REWRITER_PROMPT = """너는 트러블슈팅 기록용 query rewriter다
 사용자의 자연어 질문을 벡터 검색에 맞는 검색 쿼리로 바꾼다.
 
 규칙:
-- 감정적·비유적 표현을 기록 속 기술 용어로 확장한다
-  예: "Cursor가 멍청해 보였다" → "context fragmentation", "surface-level fix", "X-Username 인증"
-- 증상, root cause, 해결, 아키텍처 키워드를 포함한다
+- 감정적·비유적·모호한 표현을 일반적인 기술 표현으로 바꾼다
+  예: "다크 모드에서 글씨가 안 보이던 거" → "다크 모드 텍스트 색상 대비 테마 설정 문제"
+- 질문에 없는 고유명사, 제품명, 설정 키, 에러 코드를 새로 만들어 넣지 않는다
+  (기록에 없는 용어를 덧붙이면 엉뚱한 문서를 끌어온다)
+- 증상, 원인, 해결 중 질문이 묻는 측면을 드러내는 일반 키워드를 포함한다
 - 한 문장으로, 80자 이내로 출력한다
 - 설명 없이 재작성된 쿼리만 반환한다"""
 
@@ -55,7 +57,10 @@ def grade_retrieval(question: str, document: str) -> GradeDocuments:
 
 def grade_hallucination(documents: str, generation: str) -> GradeHallucination:
     user = f"Set of facts:\n\n{documents}\n\nLLM generation: {generation}"
-    return structured(HALLUCINATION_GRADER_PROMPT, user, GradeHallucination, tag="hallucination_grader")
+    # Day3-3: effort low → medium. low에서는 맞는 답도 반복 불합격(2단계 미검증 19%)해서 피드백 재생성이 내용을 깎아냈다.
+    return structured(
+        HALLUCINATION_GRADER_PROMPT, user, GradeHallucination, effort="medium", tag="hallucination_grader"
+    )
 
 
 def grade_answer(question: str, generation: str) -> GradeAnswer:
@@ -63,6 +68,9 @@ def grade_answer(question: str, generation: str) -> GradeAnswer:
     return structured(ANSWER_GRADER_PROMPT, user, GradeAnswer, tag="answer_grader")
 
 
-def rewrite_question(question: str) -> str:
-    user = f"Initial question:\n\n{question}\n\nImproved search query:"
+def rewrite_question(question: str, previous_query: str = "") -> str:
+    user = f"Initial question:\n\n{question}"
+    if previous_query:
+        user += f"\n\n이전에 시도한 검색 쿼리 (관련 기록을 찾지 못함): {previous_query}\n이와 다른 표현으로 작성한다."
+    user += "\n\nImproved search query:"
     return complete(QUESTION_REWRITER_PROMPT, user, effort="low", tag="question_rewriter")
