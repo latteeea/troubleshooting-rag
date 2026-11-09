@@ -1,31 +1,7 @@
-from llm import complete
+"""Baseline RAG: retrieve → generate (단일 호출)."""
+
+from generation import generate
 from retriever import retrieve
-
-def format_docs(docs):
-    formatted = []
-    
-    for i, doc in enumerate(docs, start=1):
-        source = doc.metadata.get("source", "unknown")
-        chunk_id = doc.metadata.get("chunk_id", "unknown")
-        
-        formatted.append(
-            f"[문서 {i}]\n"
-            f"source: {source}\n"
-            f"chunk_id: {chunk_id}\n"
-            f"content:\n{doc.page_content}"
-        )
-        
-    return "\n\n".join(formatted)
-
-BASELINE_PROMPT = """
-    너는 사용자의 기술 트러블슈팅 기록을 기반으로 답변하는 RAG assistant 이다.
-    
-    규칙:
-    - 제공된 context 안의 내용을 근거고 대답하되, 중간 단계가 비어있는 경우 적당히 추측해서 채워넣는다. 이때 추측한 내용은 [추측] 이라고 무조건 표시한다. 
-    - 답변에는 문제 상황, 해결, 인사이트를 가능한 한 구분해서 정리한다.
-    - 마지막에 참고 문서 source를 반드시 포함한다.
-    
-    """
 
 
 def answer_question(
@@ -34,13 +10,7 @@ def answer_question(
     k: int = 4,
 ) -> dict:
     docs = retrieve(query=question, strategy=strategy, k=k)
-    context = format_docs(docs)
-
-    answer = complete(
-        BASELINE_PROMPT,
-        f"질문: {question}\n\n검색된 context: {context}",
-        tag="baseline_generate",
-    )
+    answer = generate(question, docs, tag="baseline_generate")
 
     sources = [
         {
